@@ -9,20 +9,17 @@ $VERSION = "201302a";
 #  Set pb_key and pb_password to your user apikey and password. The api key can
 # be found on your account settings page. Set pb_device to the device id you
 # wish to push to. This can be found either on the main pushbullet page after
-# logging in, or by using the /pb_devices command. The /pb command can then be
-# use to push urls, or channel scanning can be toggled on to annoy you
-# constantly. Yay!
+# logging in, or by using the /pb_devices command.
 #
 # Settings:
 #  /set pb_key apikey
 #  /set pb_password password
 #  /set pb_device device_id
-#  /set pb_scan on|off          # Automatically detect and push urls
-#  /set pb_scan_channels <"#channel1, ...">  # Channels to scan for urls, empty
-#                                            # to scan all
+#  /set pb_scanned_urls_max interface   # Max number of urls to cache
 #
 # Commands:
-#  /pb(_url) url title  # Push a link, urls cannot have spaces.
+#  /pb a*glob           # Push any cached links that match the given glob
+#  /pb_push url title   # Puush an url
 #  /pb_devices          # Get a list of device model names and ids.
 
 use strict;
@@ -45,10 +42,9 @@ use WWW::Curl::Easy;
 use JSON;
 use URI::Escape;
 
-my $min_url_length = 5;
-
 my $curl = WWW::Curl::Easy->new;
-my ($pb_key, $pb_password, $pb_device, $scan, $scan_channels);
+my ($pb_key, $pb_password, $pb_device, $scanned_urls_max);
+my @scanned_urls;
 
 sub initialize {
     Irssi::settings_add_str("pbee", "pb_key", "");
@@ -60,19 +56,8 @@ sub initialize {
     Irssi::settings_add_str("pbee", "pb_device", "");
     $pb_device = Irssi::settings_get_str("pb_device");
 
-    Irssi::settings_add_bool("pbee", "pb_scan", 0);
-    $scan = Irssi::settings_get_bool("pb_scan");
-
-    Irssi::settings_add_str("pbee", "pb_scan_channels", "");
-    $scan_channels = Irssi::settings_get_str("pb_scan_channels");
-
-    if ($scan) {
-        Irssi::signal_add_last("message public", "scan");
-        Irssi::signal_add_last("ctcp action", "scan");
-    } else {
-        Irssi::signal_remove("message public", "scan");
-        Irssi::signal_remove("ctcp action", "scan");
-    }
+    Irssi::settings_add_int("pbee", "pb_scanned_urls_max", 100);
+    $scanned_urls_max = Irssi::settings_get_int("pb_scanned_urls_max");
 }
 
 sub devices {
@@ -147,23 +132,44 @@ sub push_url {
     _push(\%options);
 }
 
+sub push_url_scan {
+    my $search = shift;
+    if ($search eq "") {
+        print("Need a blob in order to push");
+        return;
+    }
+    $search = glob_to_pattern($search);
+
+    my $i = 0;
+    while ($i < scalar(@scanned_urls)) {
+        my $url = @scanned_urls[$i];
+
+        if ($url =~ $search) {
+            print("Pushing $url");
+            push_url($url);
+            splice(@scanned_urls, $i, 1);
+        } else {
+            $i++;
+        }
+    }
+}
+
 sub scan {
     my ($server, $data, $nick, $addr, $target) = @_;
     if (!$server || !$server->{connected}) {
       return;
     }
-    return unless(is_scan_channel($target));
+
     $data =~ s/^\s+//;
     $data =~ s/\s+$//;
     my @urls = ();
-    my ($url, $a, $return, $char, $ch, $result, $choice) = "";;
     my $same = 0;
-    my $sitewas = "t";
-    my @chars = ();
+
     return unless (($data =~ /\bhttp\:/) || ($data =~ /\bhttps\:/));
+
     foreach(split(/\s/, $data)) {
         if (($_ =~ /^http\:/) || ($_ =~ /^https\:/)){
-            foreach $a (@urls) {
+            foreach my $a (@urls) {
                 if ($_ eq $a) {
                     $same = 1;
                     next;
@@ -177,11 +183,25 @@ sub scan {
         }
     }
 
-    foreach (@urls) {
-        return unless (char_count($_) > $min_url_length);
-        push_url($_);
+    foreach my $url (@urls) {
+        print('pushed url');
+        push(@scanned_urls, $url) unless (grep {$_ eq $url} @scanned_urls);
+        print(scalar(@scanned_urls));
+        shift(@scanned_urls) if (scalar(@scanned_urls) > $scanned_urls_max)
     }
     return;
+}
+
+sub glob_to_pattern {
+    my $globstr = shift;
+    my %patmap = (
+        '*' => '.*',
+        '?' => '.',
+        '[' => '[',
+        ']' => ']',
+    );
+    $globstr =~ s{(.)} { $patmap{$1} || "\Q$1" }ge;
+    return '^' . $globstr . '$';
 }
 
 sub encode_url {
@@ -202,18 +222,10 @@ sub char_count {
     return($#array + 1);
 }
 
-sub is_scan_channel {
-    my $chan = shift;
-    return(1) if (! $scan_channels);
-    foreach(split(/\,/, $scan_channels)) {
-        return(1) if ($_ =~ /$chan/i);
-    }
-    return 0;
-}
-
 initialize();
 Irssi::signal_add("setup changed", "initialize");
-
-Irssi::command_bind('pb', 'push_url');
+Irssi::signal_add_last("message public", "scan");
+Irssi::signal_add_last("ctcp action", "scan");
+Irssi::command_bind('pb', 'push_url_scan');
 Irssi::command_bind('pb_url', 'push_url');
 Irssi::command_bind('pb_devices', 'devices');
