@@ -88,6 +88,14 @@ sub devices {
     }
 }
 
+sub cached {
+    foreach my $url (@scanned_urls) {
+        print($url);
+    }
+    my $count = scalar(@scanned_urls);
+    print("$count cached urls");
+}
+
 sub _push {
     my $params = shift;
     my %options = %$params;;
@@ -109,10 +117,11 @@ sub _push {
     $curl->setopt(CURLOPT_WRITEDATA, \$response);
     my $retcode = $curl->perform;
 
-    if ($retcode != 0)
-    {
+    if ($retcode != 0) {
         print("Issue pushing bullet");
+        return 0;
     }
+    return 1;
 }
 
 sub push_url {
@@ -126,26 +135,28 @@ sub push_url {
         $title = join(' ', @tokens);
     }
 
-    $url = encode_url($url);
-
-    my %options = ("type" => "link", "title" => $title, "url" => $url);
-    _push(\%options);
+    my $enc_title = encode_url($title);
+    my $enc_url = encode_url($url);
+    my %options = ("type" => "link", "title" => $enc_title, "url" => $enc_url);
+    if (_push(\%options)) {
+        print("Pushed $url");
+    }
 }
 
 sub push_url_scan {
     my $search = shift;
-    if ($search eq "") {
-        print("Need a blob in order to push");
+    if ($search eq "" and scalar(@scanned_urls) > 0) {
+        my $url = pop(@scanned_urls);
+        push_url($url);
         return;
     }
-    $search = glob_to_pattern($search);
 
+    $search = glob_to_pattern($search);
     my $i = 0;
     while ($i < scalar(@scanned_urls)) {
         my $url = @scanned_urls[$i];
 
         if ($url =~ $search) {
-            print("Pushing $url");
             push_url($url);
             splice(@scanned_urls, $i, 1);
         } else {
@@ -227,3 +238,4 @@ Irssi::signal_add_last("ctcp action", "scan");
 Irssi::command_bind('pb', 'push_url_scan');
 Irssi::command_bind('pb_url', 'push_url');
 Irssi::command_bind('pb_devices', 'devices');
+Irssi::command_bind('pb_cached', 'cached');
