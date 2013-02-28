@@ -1,4 +1,5 @@
 #!/usr/bin/perl -w
+$VERSION = "201302a";
 
 # Provides a method to push PushBullet links, as well as autopushing links in
 # messages. WARNING: Currently this lets Irssi save the users password. This is
@@ -23,8 +24,6 @@
 # Commands:
 #  /pb(_url) url title  # Push a link, urls cannot have spaces.
 #  /pb_devices          # Get a list of device model names and ids.
-
-VERSION = "201302a";
 
 use strict;
 use vars qw($VERSION %IRSSI);
