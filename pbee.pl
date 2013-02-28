@@ -184,9 +184,7 @@ sub scan {
     }
 
     foreach my $url (@urls) {
-        print('pushed url');
         push(@scanned_urls, $url) unless (grep {$_ eq $url} @scanned_urls);
-        print(scalar(@scanned_urls));
         shift(@scanned_urls) if (scalar(@scanned_urls) > $scanned_urls_max)
     }
     return;
