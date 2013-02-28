@@ -142,7 +142,6 @@ sub push_url {
     }
 
     $url = encode_url($url);
-    print($url);
 
     my %options = ("type" => "link", "title" => $title, "url" => $url);
     _push(\%options);
