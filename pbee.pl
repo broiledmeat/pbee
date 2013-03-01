@@ -72,20 +72,24 @@ sub devices {
 
     if ($retcode == 0)
     {
-        $response = HTTP::Response->parse($response)->decoded_content;
-        my $json = JSON->new->allow_nonref;
-        my $devices = $json->decode($response)->{"devices"};
+        $response = HTTP::Response->parse($response);
 
-        print("PushBullet Devices:");
-        foreach my $device (@$devices)
+        if ($response->code == 200)
         {
-            my $id = $device->{"id"};
-            my $model = $device->{"extras"}->{"model"};
-            print("$model: $id");
+            my $json = JSON->new->allow_nonref;
+            my $devices = $json->decode($response->decoded_content)->{"devices"};
+
+            print("PushBullet Devices:");
+            foreach my $device (@$devices)
+            {
+                my $id = $device->{"id"};
+                my $model = $device->{"extras"}->{"model"};
+                print("$model: $id");
+            }
+            return;
         }
-    } else {
-        print("Issue retrieving devices");
     }
+    print("Issue retrieving devices");
 }
 
 sub cached {
